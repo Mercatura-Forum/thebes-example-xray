@@ -1,0 +1,56 @@
+@import 'tailwindcss';
+/* Space Grotesk for headings (technical, precise); DM Sans for body. */
+@import '@fontsource-variable/space-grotesk';
+@import '@fontsource-variable/dm-sans';
+
+/* ── Lumen design tokens ──
+   A radiology reading room: deep slate chrome so films and scans read with high
+   contrast, a cyan diagnostic accent, and a fixed set of study-status colours so
+   the worklist encodes pipeline position (scheduled → acquired → reported), not
+   decoration. Identifiers (MRN, accession) are tabular monospace. */
+@theme {
+  --color-accent: #22d3ee;   /* Memphis sign-in accent (alias of action) */
+  --color-ink: #e6edf5;
+  --color-ink-soft: #8b98ab;
+  --color-paper: #080b11;    /* reading-room near-black */
+  --color-surface: #111824;  /* panel */
+  --color-surface-2: #0d131d;
+  --color-line: #243140;
+  --color-act: #22d3ee;      /* cyan action accent */
+  --color-act-ink: #04161b;  /* text on a cyan fill */
+
+  /* Study-status colours (semantic, fixed). */
+  --st-scheduled: #f59e0b;   /* amber — awaiting acquisition */
+  --st-acquired: #38bdf8;    /* sky — images in, awaiting read */
+  --st-reported: #34d399;    /* emerald — report finalized */
+  --st-none: #64748b;        /* slate */
+
+  --font-display: 'Space Grotesk Variable', ui-sans-serif, system-ui, sans-serif;
+  --font-sans: 'DM Sans Variable', ui-sans-serif, system-ui, sans-serif;
+  --font-mono: ui-monospace, 'SF Mono', 'JetBrains Mono', Menlo, monospace;
+}
+
+html, body, #root { height: 100%; }
+body {
+  margin: 0;
+  background:
+    radial-gradient(1100px 520px at 78% -8%, color-mix(in srgb, var(--color-act) 9%, transparent), transparent 60%),
+    var(--color-paper);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+.font-display { font-family: var(--font-display); letter-spacing: -0.02em; }
+.mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; letter-spacing: -0.01em; }
+.nums { font-variant-numeric: tabular-nums; }
+.card { background: var(--color-surface); border: 1px solid var(--color-line); border-radius: 14px; }
+.panel { background: var(--color-surface-2); border: 1px solid var(--color-line); border-radius: 12px; }
+
+/* Media frames render on black (the lightbox), images contain (no crop on scans). */
+.media { background: #000; overflow: hidden; border-radius: 10px; }
+.media img { width: 100%; height: 100%; object-fit: contain; display: block; background: #000; }
+.media img[data-loaded='false'] { filter: blur(8px); opacity: .4; }
+.media img { transition: filter .35s ease, opacity .35s ease; }
+
+:focus-visible { outline: 2px solid var(--color-act); outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; } }
