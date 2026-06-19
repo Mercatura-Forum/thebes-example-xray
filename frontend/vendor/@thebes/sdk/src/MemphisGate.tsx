@@ -48,7 +48,13 @@ export function SignOutChip({ className = '' }: { className?: string }) {
     </span>
   )
 
-  const submit = () => { auth.signIn(name.trim() || 'Guest').catch(() => { /* surfaced by auth.error */ }) }
+  // Memphis handles look like  <stem>.thebes  — we append ".thebes" so a visitor
+  // only types the stem (3–32 chars, a–z 0–9 -). No bare fallback: an invalid
+  // stem keeps the button disabled instead of failing with a cryptic error.
+  const stem = name.trim().toLowerCase().replace(/\.thebes$/, '')
+  const stemOk = stem.length >= 3 && stem.length <= 32 && /^[a-z0-9-]+$/.test(stem) && !stem.startsWith('-') && !stem.endsWith('-')
+  const handle = `${stem}.thebes`
+  const submit = () => { if (stemOk && !auth.busy) auth.signIn(handle).catch(() => { /* surfaced by auth.error */ }) }
 
   if (!open) return (
     <button
@@ -58,17 +64,22 @@ export function SignOutChip({ className = '' }: { className?: string }) {
   )
 
   return (
-    <span className={`inline-flex items-center gap-2 ${className}`}>
-      <input
-        className="rounded-lg bg-black/30 px-2.5 py-1.5 text-xs text-ink ring-1 ring-[var(--color-act)]/30 outline-none focus:ring-[var(--color-act)]"
-        placeholder="Your name" value={name} autoFocus
-        onChange={(e) => setName(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && submit()}
-      />
-      <button
-        className="rounded-lg px-3 py-1.5 text-xs font-semibold text-[var(--color-act-ink)] transition hover:brightness-110 disabled:opacity-50"
-        style={{ background: 'var(--color-act)' }} onClick={submit} disabled={auth.busy}>
-        {auth.busy ? 'Signing in…' : 'Sign in with passkey'}
-      </button>
+    <span className={`inline-flex flex-col items-stretch gap-1 ${className}`}>
+      <span className="inline-flex items-center gap-2">
+        <input
+          className="rounded-lg bg-black/30 px-2.5 py-1.5 text-xs text-ink ring-1 ring-[var(--color-act)]/30 outline-none focus:ring-[var(--color-act)]"
+          placeholder="yourname" value={name} autoFocus aria-label="Thebes handle"
+          onChange={(e) => setName(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && submit()}
+        />
+        <button
+          className="rounded-lg px-3 py-1.5 text-xs font-semibold text-[var(--color-act-ink)] transition hover:brightness-110 disabled:opacity-50"
+          style={{ background: 'var(--color-act)' }} onClick={submit} disabled={auth.busy || !stemOk}>
+          {auth.busy ? 'Signing in…' : 'Sign in with passkey'}
+        </button>
+      </span>
+      <span style={{ fontSize: '11px', opacity: 0.7 }}>
+        {stem ? <>→ becomes <b>{handle}</b></> : 'pick a handle — we add .thebes'} · 3–32 · a–z 0–9 -
+      </span>
       {auth.error && <span className="rounded-md bg-red-500/15 px-2 py-1 text-xs text-red-300">{auth.error}</span>}
     </span>
   )
