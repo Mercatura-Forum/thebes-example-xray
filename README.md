@@ -43,51 +43,90 @@ React + @thebes/sdk  ─────►  Lumen backend (Motoko + thebes-lib)
 - **Frontend** (`frontend/`) — React + Vite + Tailwind, built on
   [`@thebes/sdk`](https://github.com/Mercatura-Forum/thebes-sdk): typed
   query/update calls, the chunked media-upload helper, and Memphis passkey
-  sign-in. Served to the browser as certified assets.
+  sign-in. Served to the browser as certified assets. The SDK is **vendored** under
+  `frontend/vendor/@thebes/sdk` and resolved as a local dependency.
 - **Backend** (`motoko/`) — a `persistent actor` built on
   [`thebes-lib`](https://github.com/Mercatura-Forum/thebes-lib) (`Admin` for the
   ownership tier, `Pagination` for bounded lists). Every privileged method has an
   `*OrTrap` twin so an authorization failure surfaces as a clear rejection rather
-  than a silently-swallowed error.
-- **Media contract** — a separate Thebes contract instance that holds image bytes,
-  content-addressed and served at `/_/raw/{cid}/{path}`. This example reads its id
-  from `window.MEDIA_CID`.
+  than a silently-swallowed error. The library is **vendored** under
+  `motoko/thebes-lib` and resolved as a local Mops dependency.
+- **Media contract** (optional) — a separate Thebes contract instance that holds
+  image bytes, content-addressed and served at `/_/raw/{cid}/{path}`. This example
+  reads its id from `window.MEDIA_CID`; without one the app degrades gracefully and
+  image bytes simply aren't stored.
 
-Neither toolkit is copied into this repository — both resolve as pinned
-git/mops dependencies, so an improvement to the shared toolkit lands in one place.
+Both halves are self-contained: the repository builds with no external Git or Mops
+toolkit pins. The frontend asset-canister wasm is the one artifact fetched at
+deploy time (see [Deploy](#deploy)).
 
 ## Run it locally
 
-**Frontend** (Node 20+):
+**Frontend** (Node 18+):
 
 ```bash
 cd frontend
-npm install
-npm run dev            # vendors boundary.js/passkey.js from @thebes/sdk, starts Vite
+npm install            # resolves the vendored @thebes/sdk
+npm run dev            # sync-sdk copies the browser runtimes into public/, then Vite serves
 ```
 
-**Backend** ([mops](https://mops.one)):
+**Backend** ([mops](https://mops.one)). `mops install` fetches the pinned Motoko
+compiler **1.4.1** to `~/.cache/mops/moc/1.4.1/moc` (macOS:
+`~/Library/Caches/mops/moc/1.4.1/moc`) — use that binary, not a bare `moc` on
+`PATH`:
 
 ```bash
 cd motoko
-mops install
-moc --check $(mops sources) main.mo
+mops install           # resolves the vendored thebes-lib + the pinned compiler
+"$(ls "$HOME/.cache/mops/moc/1.4.1/moc" "$HOME/Library/Caches/mops/moc/1.4.1/moc" 2>/dev/null | head -1)" --check $(mops sources) main.mo
 ```
+
+`mops install` prints `core@2.5.0 requires moc >= 1.6.0` while 1.4.1 is pinned;
+this is expected — the cluster pins 1.4.1 and the build succeeds.
 
 ## Deploy
 
-The backend and frontend deploy to a Thebes cluster with
-[`thebes-deploy`](https://github.com/Mercatura-Forum/thebes-sdk). The frontend
-reads two contract ids from `window` globals, injected at deploy time:
+`thebes.toml` describes the deploy. Its `[networks.wan].validators` are pre-filled
+with the current WAN cluster endpoints; to re-confirm them run `thebes-deploy init`.
 
-| Global        | Points at                                  |
-| ------------- | ------------------------------------------ |
-| `XRAY_CID`    | the Lumen backend contract                 |
-| `MEDIA_CID`   | the media contract instance for its images |
+### 1. Backend
+
+```sh
+thebes-deploy identity new me      # one-time local signing identity
+thebes-deploy deploy xray          # build + install + verify → prints the backend cid
+```
+
+### 2. Frontend
+
+The frontend installs an asset canister, then uploads your built bundle. Fetch the
+asset-canister wasm once (it is referenced by `thebes.toml` as `asset_canister.wasm`):
+
+```sh
+curl -L -o asset_canister.wasm \
+  https://github.com/Mercatura-Forum/Thebes-Protocol-/releases/download/asset-canister-v0.1.0/asset_canister.wasm
+```
+
+Build the bundle and inject the backend cid from step 1 into the built page (the
+frontend reads `window.XRAY_CID` at runtime), then deploy:
+
+```sh
+cd frontend && npm run build && cd ..
+sed -i 's#<head>#<head><script>window.XRAY_CID=YOUR_XRAY_CID;</script>#' frontend/dist/index.html
+thebes-deploy deploy web           # install asset canister + upload bundle + verify
+```
+
+The deploy prints the live URL:
+`https://memphis.mercaturaforum.com/_/raw/<web-cid>/index.html`.
 
 The first signed-in visitor can claim the clinic and load a small demo worklist
-(three patients across the three study states) from the worklist screen, then
-acquire a real image on any study to see the media round-trip end to end.
+(three patients across the three study states) from the worklist screen.
+
+> Image bytes are served by a separate media canister via `window.MEDIA_CID`.
+> It is optional — without one, studies render without their image pixels. Inject
+> it alongside `XRAY_CID` if you have a media instance:
+> `<script>window.XRAY_CID=…;window.MEDIA_CID=…;</script>`.
+
+For a machine-readable deploy contract, see [AGENTS.md](AGENTS.md).
 
 ## License
 
