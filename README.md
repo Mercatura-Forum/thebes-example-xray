@@ -44,7 +44,8 @@ React + @thebes/sdk  ─────►  Lumen backend (Motoko + thebes-lib)
   [`@thebes/sdk`](https://github.com/Mercatura-Forum/thebes-sdk): typed
   query/update calls, the chunked media-upload helper, and Memphis passkey
   sign-in. Served to the browser as certified assets. The SDK is **vendored** under
-  `frontend/vendor/@thebes/sdk` and resolved as a local dependency.
+  `frontend/vendor/@thebes/sdk` and resolved as a local dependency
+  (upstream source of truth: [`thebes-sdk`](https://github.com/Mercatura-Forum/thebes-sdk)).
 - **Backend** (`motoko/`) — a `persistent actor` built on
   [`thebes-lib`](https://github.com/Mercatura-Forum/thebes-lib) (`Admin` for the
   ownership tier, `Pagination` for bounded lists). Every privileged method has an
