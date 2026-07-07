@@ -1,5 +1,5 @@
 [project]
-name = "thebes-example-xray"
+name = "xray-throwaway"
 default_network = "wan"
 chain_id = 2026
 
@@ -15,13 +15,6 @@ routing = "smart"
 
 [canisters.xray]
 type = "backend-motoko"
-cid = 71554513306883
+cid = 64841135246282
 wasm = "build/xray.wasm"
 build = 'cd motoko && mops install >/dev/null 2>&1 && mkdir -p ../build && MOC="$(ls "$HOME/.cache/mops/moc/1.4.1/moc" "$HOME/Library/Caches/mops/moc/1.4.1/moc" 2>/dev/null | head -1)" && "$MOC" $(mops sources) -o ../build/xray.wasm main.mo'
-
-[canisters.web]
-type = "frontend"
-cid = 57650296797843
-wasm = "asset_canister.wasm"
-bundle = "frontend/dist"
-health_check_url = "/index.html"

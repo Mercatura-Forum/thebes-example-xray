@@ -4,6 +4,7 @@ import Int "mo:core/Int";
 import Text "mo:core/Text";
 import Principal "mo:core/Principal";
 import Time "mo:core/Time";
+import List "mo:core/List";
 import Array "mo:core/Array";
 import Iter "mo:core/Iter";
 import Result "mo:core/Result";
@@ -233,7 +234,16 @@ persistent actor Lumen {
     if (not canAcquire(caller)) { return #err("Not authorized (technician or admin required)") };
     switch (Map.get(series, Nat.compare, seriesId)) {
       case null { #err("Unknown series " # Nat.toText(seriesId)) };
-      case (?s) { #ok(addImageRaw(seriesId, s.studyId, imagePath, instanceNumber)) };
+      case (?s) {
+        // Instance numbers order a series — a duplicate would corrupt the
+        // stack (and trip the oracle's R5). Rejected at the write.
+        for ((_, im) in Map.entries(images)) {
+          if (im.seriesId == seriesId and im.instanceNumber == instanceNumber) {
+            return #err("Instance " # Nat.toText(instanceNumber) # " already exists in this series");
+          };
+        };
+        #ok(addImageRaw(seriesId, s.studyId, imagePath, instanceNumber));
+      };
     };
   };
   public shared(msg) func addImage(seriesId : Nat, imagePath : Text, instanceNumber : Nat) : async Result.Result<Nat, Text> {
@@ -478,5 +488,128 @@ persistent actor Lumen {
     ignore doFinalizeReport(msg.caller, s3);
 
     true;
+  };
+  // ── The oracle: five laws over the whole archive, recomputable by anyone ──
+  // (Counts only — no PHI crosses this surface.)
+  public query func invariantReportView() : async [{ rule : Text; detail : Text }] {
+    let bad = List.empty<{ rule : Text; detail : Text }>();
+    // R1 hierarchy: every child points at a real parent.
+    for ((id, st) in Map.entries(studies)) {
+      if (Map.get(patients, Nat.compare, st.patientId) == null) {
+        List.add(bad, { rule = "R1 hierarchy"; detail = "study #" # Nat.toText(id) # " points at a missing patient" });
+      };
+    };
+    for ((id, se) in Map.entries(series)) {
+      if (Map.get(studies, Nat.compare, se.studyId) == null) {
+        List.add(bad, { rule = "R1 hierarchy"; detail = "series #" # Nat.toText(id) # " points at a missing study" });
+      };
+    };
+    for ((id, im) in Map.entries(images)) {
+      if (Map.get(series, Nat.compare, im.seriesId) == null) {
+        List.add(bad, { rule = "R1 hierarchy"; detail = "image #" # Nat.toText(id) # " points at a missing series" });
+      };
+      switch (Map.get(series, Nat.compare, im.seriesId)) {
+        case (?se) {
+          if (se.studyId != im.studyId) List.add(bad, { rule = "R1 hierarchy"; detail = "image #" # Nat.toText(id) # " denormalized studyId disagrees with its series" });
+        };
+        case null {};
+      };
+    };
+    // R2 reports: every report sits on a real study; a FINAL report is never empty.
+    for ((sid, r) in Map.entries(reports)) {
+      if (Map.get(studies, Nat.compare, sid) == null) {
+        List.add(bad, { rule = "R2 report"; detail = "a report sits on a missing study #" # Nat.toText(sid) });
+      };
+      if (r.status == #final and (Text.size(r.findings) == 0 or Text.size(r.impression) == 0)) {
+        List.add(bad, { rule = "R2 report"; detail = "final report on study #" # Nat.toText(sid) # " has empty findings or impression" });
+      };
+    };
+    // R3 access log: append-only by construction — ids are dense 1..n and every
+    // event references a real study.
+    var i : Nat = 1;
+    while (i < nextAccessId) {
+      switch (Map.get(accessLog, Nat.compare, i)) {
+        case null List.add(bad, { rule = "R3 log"; detail = "access event #" # Nat.toText(i) # " is missing — the log has a hole" });
+        case (?e) {
+          if (Map.get(studies, Nat.compare, e.studyId) == null) {
+            List.add(bad, { rule = "R3 log"; detail = "access event #" # Nat.toText(i) # " references a missing study" });
+          };
+        };
+      };
+      i += 1;
+    };
+    // R4 status: a study's status agrees with its data (images ⇒ at least
+    // acquired; a final report ⇒ reported).
+    for ((sid, st) in Map.entries(studies)) {
+      var hasImages = false;
+      for ((_, im) in Map.entries(images)) { if (im.studyId == sid) hasImages := true };
+      if (hasImages and st.status == #scheduled) {
+        List.add(bad, { rule = "R4 status"; detail = "study #" # Nat.toText(sid) # " has images but is still scheduled" });
+      };
+      switch (Map.get(reports, Nat.compare, sid)) {
+        case (?r) {
+          if (r.status == #final and st.status != #reported) {
+            List.add(bad, { rule = "R4 status"; detail = "study #" # Nat.toText(sid) # " has a final report but is not marked reported" });
+          };
+        };
+        case null {};
+      };
+    };
+    // R5 instances: instance numbers are unique within a series.
+    for ((sid, _) in Map.entries(series)) {
+      let seen = Map.empty<Nat, Bool>();
+      for ((_, im) in Map.entries(images)) {
+        if (im.seriesId == sid) {
+          if (Map.get(seen, Nat.compare, im.instanceNumber) != null) {
+            List.add(bad, { rule = "R5 instance"; detail = "series #" # Nat.toText(sid) # " has a duplicate instance number " # Nat.toText(im.instanceNumber) });
+          };
+          Map.add(seen, Nat.compare, im.instanceNumber, true);
+        };
+      };
+    };
+    List.toArray(bad);
+  };
+
+  // One public row for the footer seal — counts only, never PHI.
+  public query func lumenSealView() : async [{
+    patients : Nat; studies : Nat; series : Nat; images : Nat;
+    reportsDraft : Nat; reportsFinal : Nat; accessEvents : Nat; staff : Nat;
+    violations : Nat; checkedAt : Int;
+  }] {
+    var draft : Nat = 0; var fin : Nat = 0;
+    for ((_, r) in Map.entries(reports)) { if (r.status == #final) fin += 1 else draft += 1 };
+    // Cheap violation count for the seal: the log-density + hierarchy checks.
+    var v : Nat = 0;
+    var i : Nat = 1;
+    while (i < nextAccessId) { if (Map.get(accessLog, Nat.compare, i) == null) v += 1; i += 1 };
+    for ((_, st) in Map.entries(studies)) { if (Map.get(patients, Nat.compare, st.patientId) == null) v += 1 };
+    [{
+      patients = Map.size(patients); studies = Map.size(studies); series = Map.size(series);
+      images = Map.size(images); reportsDraft = draft; reportsFinal = fin;
+      accessEvents = Map.size(accessLog); staff = Map.size(roles);
+      violations = v; checkedAt = Time.now();
+    }];
+  };
+
+  // The modality board: live counts per (modality × status) — the status wall
+  // draws from this. Staff-only (it is worklist-derived).
+  public shared query(msg) func modalityBoardView() : async [{
+    modality : Text; scheduled : Nat; acquired : Nat; reported : Nat;
+  }] {
+    if (not isStaff(msg.caller)) return [];
+    let mods = Map.empty<Text, (Nat, Nat, Nat)>();
+    for ((_, st) in Map.entries(studies)) {
+      let (a, b, c) = switch (Map.get(mods, Text.compare, st.modality)) { case (?x) x; case null (0, 0, 0) };
+      let next = switch (st.status) {
+        case (#scheduled) (a + 1, b, c);
+        case (#acquired) (a, b + 1, c);
+        case (#reported) (a, b, c + 1);
+      };
+      Map.add(mods, Text.compare, st.modality, next);
+    };
+    Array.map<(Text, (Nat, Nat, Nat)), { modality : Text; scheduled : Nat; acquired : Nat; reported : Nat }>(
+      Iter.toArray(Map.entries(mods)),
+      func((m, (a, b, c))) { { modality = m; scheduled = a; acquired = b; reported = c } },
+    );
   };
 };
