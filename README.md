@@ -90,6 +90,12 @@ this is expected — the cluster pins 1.4.1 and the build succeeds.
 `thebes.toml` describes the deploy. Its `[networks.wan].validators` are pre-filled
 with the current WAN cluster endpoints; to re-confirm them run `thebes-deploy init`.
 
+> **Deploying your own copy?** The committed `cid` values pin the **live catalog
+> deployment** (that's what the demo links serve — only its controller can
+> upgrade it). Before your first deploy, set `cid = "auto"` on each canister:
+> the deploy allocates fresh canisters you control and writes their ids back
+> into the manifest.
+
 ### 1. Backend
 
 ```sh
