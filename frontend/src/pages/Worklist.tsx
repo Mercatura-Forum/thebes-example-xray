@@ -1,14 +1,54 @@
 import { useState } from 'react'
 import { Link, useOutletContext } from 'react-router-dom'
 import { useQuery } from '@thebes/sdk'
-import { XRAY_CID, M, pageArgs, decodeWorklist, seedDemo } from '../lib/xray-api'
+import { XRAY_CID, M, M2, pageArgs, decodeWorklist, decodeBoard, seedDemo, type BoardRow } from '../lib/xray-api'
 import type { LumenCtx } from '../components/Layout'
 import { relTime } from '../lib/config'
+import { useCalibrated } from '../lib/useCalibrated'
 import { Button, Spinner, EmptyState, ErrorNote, StatusChip, ReportChip, ModalityBadge } from '../components/ui'
+
+const STATUSES = ['scheduled', 'acquired', 'reported'] as const
+
+/** The board: a PACS status wall — one glowing cell per modality × pipeline
+ *  stage, live from the chain. The reading room's heartbeat at a glance. */
+function ModalityWall({ rows }: { rows: BoardRow[] }) {
+  if (rows.length === 0) return null
+  const max = Math.max(...rows.flatMap((r) => [Number(r.scheduled), Number(r.acquired), Number(r.reported)]), 1)
+  return (
+    <section className="wall" data-testid="modality-wall">
+      <div className="grid gap-1.5" style={{ gridTemplateColumns: `5rem repeat(${STATUSES.length}, 1fr)` }}>
+        <span />
+        {STATUSES.map((st) => (
+          <span key={st} className="text-center text-[10px] font-bold uppercase tracking-[0.18em]" style={{ color: `var(--st-${st})` }}>{st}</span>
+        ))}
+        {rows.map((r) => (
+          [
+            <span key={r.modality} className="self-center font-mono text-sm font-bold text-ink">{r.modality}</span>,
+            ...STATUSES.map((st) => {
+              const n = Number(r[st])
+              return (
+                <div key={r.modality + st} className="wall-cell nums" style={{
+                  ['--cell' as string]: `var(--st-${st})`,
+                  opacity: n === 0 ? 0.25 : 0.55 + 0.45 * (n / max),
+                }}>
+                  {n}
+                </div>
+              )
+            }),
+          ]
+        ))}
+      </div>
+    </section>
+  )
+}
 
 export function Worklist() {
   const { role, refetchRole } = useOutletContext<LumenCtx>()
-  const wl = useQuery(XRAY_CID, M.worklist, pageArgs(0, 200), decodeWorklist, [])
+  // Timestamps render through the chain-clock calibration, which lands async —
+  // re-derive the list when it does.
+  const cal = useCalibrated()
+  const wl = useQuery(XRAY_CID, M.worklist, pageArgs(0, 200), decodeWorklist, [cal ? 1 : 0])
+  const board = useQuery<BoardRow[]>(XRAY_CID, M2.board, undefined, decodeBoard, [])
   const [seeding, setSeeding] = useState(false)
   const [notice, setNotice] = useState<string>()
 
@@ -57,6 +97,8 @@ export function Worklist() {
         </div>
         <Link to="/patients"><Button variant="ghost">Patients →</Button></Link>
       </div>
+
+      <ModalityWall rows={board.data ?? []} />
 
       {wl.error && <ErrorNote message={wl.error} />}
 

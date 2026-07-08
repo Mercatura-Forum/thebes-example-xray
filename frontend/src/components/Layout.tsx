@@ -1,6 +1,27 @@
+import { useEffect } from 'react'
 import { NavLink, Outlet } from 'react-router-dom'
 import { SignOutChip, useQuery } from '@thebes/sdk'
-import { XRAY_CID, M, decodeRole } from '../lib/xray-api'
+import { XRAY_CID, M, M2, decodeRole, decodeSeal, calibrateChainClock, type SealRow } from '../lib/xray-api'
+
+function LumenSeal() {
+  const { data } = useQuery<SealRow>(XRAY_CID, M2.seal, undefined, decodeSeal)
+  if (!data) return null
+  const ok = Number(data.violations) === 0
+  return (
+    <div className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1 nums text-[11px]" data-testid="lumen-seal">
+      <span className={`inline-block h-2 w-2 rounded-full ${ok ? 'bg-[var(--st-reported)]' : 'bg-red-500'}`} />
+      {ok ? (
+        <span className="text-ink-soft">
+          <b className="text-ink">The archive re-proves itself on every read</b> · {data.patients.toString()} patients ·{' '}
+          {data.studies.toString()} studies · {data.images.toString()} images · {data.reportsFinal.toString()} final +{' '}
+          {data.reportsDraft.toString()} draft reports · {data.accessEvents.toString()} access events, gap-free · 0 violations across 5 laws
+        </span>
+      ) : (
+        <span className="font-semibold text-red-400">The oracle reports {data.violations.toString()} violation(s).</span>
+      )}
+    </div>
+  )
+}
 
 /** Shared route context: the caller's effective role + a way to refresh it. */
 export interface LumenCtx { role: string; refetchRole: () => void }
@@ -8,6 +29,7 @@ export interface LumenCtx { role: string; refetchRole: () => void }
 const isAdmin = (role: string) => role === 'owner' || role === 'admin'
 
 export function Layout() {
+  useEffect(() => { calibrateChainClock().catch(() => {}) }, [])
   const roleQ = useQuery(XRAY_CID, M.myRole, undefined, decodeRole, [])
   const role = roleQ.data ?? 'none'
   const ctx: LumenCtx = { role, refetchRole: roleQ.refetch }
@@ -42,11 +64,14 @@ export function Layout() {
         </div>
       </header>
       <main className="mx-auto w-full max-w-6xl flex-1 px-5 py-8"><Outlet context={ctx} /></main>
-      <footer className="mx-auto max-w-6xl px-5 py-8 text-xs text-ink-soft">
-        Lumen — a teaching example for Thebes Protocol. Patient records, studies, and
-        diagnostic reports live on the chain; image pixels live in the Thebes media
-        contract. Records are visible to clinical staff only, and every opened study
-        is written to an immutable access log.
+      <footer className="mx-auto w-full max-w-6xl px-5 py-8 text-xs text-ink-soft">
+        <p>
+          Lumen — a teaching example for Thebes Protocol. Patient records, studies, and
+          diagnostic reports live on the chain; image pixels live in the Thebes media
+          contract. Records are visible to clinical staff only, and every opened study
+          is written to an immutable, gap-free access log.
+        </p>
+        <LumenSeal />
       </footer>
     </div>
   )

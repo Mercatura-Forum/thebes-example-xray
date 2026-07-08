@@ -124,3 +124,44 @@ export async function seedDemo(): Promise<boolean> {
 }
 
 export { query, XRAY_CID }
+
+
+// ── v2 surface: the seal, the oracle, the modality board ──
+import { calibrate } from './chainTime'
+
+export interface SealRow {
+  patients: bigint; studies: bigint; series: bigint; images: bigint
+  reportsDraft: bigint; reportsFinal: bigint; accessEvents: bigint; staff: bigint
+  violations: bigint; checkedAt: bigint
+}
+export interface BoardRow { modality: string; scheduled: bigint; acquired: bigint; reported: bigint }
+export interface ViolationRow { rule: string; detail: string }
+
+const SEAL_FIELDS = [
+  { name: 'patients', type: 'nat' as const }, { name: 'studies', type: 'nat' as const },
+  { name: 'series', type: 'nat' as const }, { name: 'images', type: 'nat' as const },
+  { name: 'reportsDraft', type: 'nat' as const }, { name: 'reportsFinal', type: 'nat' as const },
+  { name: 'accessEvents', type: 'nat' as const }, { name: 'staff', type: 'nat' as const },
+  { name: 'violations', type: 'nat' as const }, { name: 'checkedAt', type: 'int' as const },
+]
+const BOARD_FIELDS = [
+  { name: 'modality', type: 'text' as const }, { name: 'scheduled', type: 'nat' as const },
+  { name: 'acquired', type: 'nat' as const }, { name: 'reported', type: 'nat' as const },
+]
+const VIOLATION_FIELDS = [{ name: 'rule', type: 'text' as const }, { name: 'detail', type: 'text' as const }]
+
+export const decodeSeal = (h: string) => {
+  const rows = decodeVecRecord(h, SEAL_FIELDS) as unknown as SealRow[]
+  if (rows.length > 0) calibrate(rows[0].checkedAt)
+  return rows[0]
+}
+export const decodeBoard = (h: string) => decodeVecRecord(h, BOARD_FIELDS) as unknown as BoardRow[]
+export const decodeViolations = (h: string) => decodeVecRecord(h, VIOLATION_FIELDS) as unknown as ViolationRow[]
+
+export const M2 = { seal: 'lumenSealView', board: 'modalityBoardView', invariants: 'invariantReportView' } as const
+
+/** One-shot chain-clock calibration (the seal carries checkedAt). */
+export async function calibrateChainClock(): Promise<void> {
+  const r = await query(XRAY_CID, 'lumenSealView')
+  decodeSeal(r.reply_hex ?? r.reply ?? '')
+}

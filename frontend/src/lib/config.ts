@@ -10,9 +10,11 @@ declare global {
 export const XRAY_CID: number = (typeof window !== 'undefined' && window.XRAY_CID) || 0
 export const MEDIA_CID: number = (typeof window !== 'undefined' && window.MEDIA_CID) || 0
 
-/** Relative time for a nanosecond timestamp. */
+import { wallDate } from './chainTime'
+
+/** Relative time for a CHAIN ns timestamp (ns since genesis — calibrated). */
 export function relTime(ns: bigint): string {
-  const ms = Number(ns / 1_000_000n)
+  const ms = wallDate(ns).getTime()
   const diff = Date.now() - ms
   if (diff < 60_000) return 'just now'
   if (diff < 3_600_000) return `${Math.floor(diff / 60_000)}m ago`

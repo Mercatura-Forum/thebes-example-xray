@@ -1,0 +1,20 @@
+[project]
+name = "thebes-example-xray-metered"
+default_network = "wan-experimental"
+chain_id = 2026
+
+[networks.wan-experimental]
+validators = [
+    "http://72.62.235.133:18080",
+    "http://72.62.235.127:18080",
+    "http://72.62.235.134:18080",
+    "http://76.13.140.52:18080",
+]
+boundary = "https://memphis.mercaturaforum.com"
+routing = "smart"
+
+[canisters.xray]
+type = "backend-motoko"
+cid = 900165
+wasm = "build/xray.wasm"
+build = "mkdir -p build && /opt/moc-1.4.1/moc --package core .mops/core@2.5.0/src --package thebes-lib '.mops/_github/thebes-lib#v0.2.0/src' -o build/xray.wasm main.mo"
