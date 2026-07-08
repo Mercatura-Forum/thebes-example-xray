@@ -6,6 +6,15 @@ the Thebes **media contract**. It shows how to build an access-controlled,
 privacy-sensitive application — role-based staff, an immutable access log, and
 binary media — entirely on Thebes.
 
+The privacy surface is **checkable, not just claimed**: the access log's ids
+are dense (1..n with no holes — append-only made verifiable), final reports
+can never be empty or edited, the DICOM-style hierarchy is referentially
+whole, and instance numbers are unique per series. The **public oracle**
+(`invariantReportView`) re-proves those five laws on every read, and the seal
+(`lumenSealView`) exposes counts only — no patient data ever crosses it.
+
+Live demo: <https://memphis.mercaturaforum.com/_/raw/57650296797843/index.html>
+
 ![stack: React + @thebes/sdk · Motoko + thebes-lib · Thebes media contract](https://img.shields.io/badge/stack-thebes-22d3ee)
 
 ## What it demonstrates
