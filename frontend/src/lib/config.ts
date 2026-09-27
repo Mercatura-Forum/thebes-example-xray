@@ -7,8 +7,8 @@ declare global {
   }
 }
 
-export const XRAY_CID: number = (typeof window !== 'undefined' && window.XRAY_CID) || 0
-export const MEDIA_CID: number = (typeof window !== 'undefined' && window.MEDIA_CID) || 0
+export const XRAY_CID: number = (typeof window !== 'undefined' && window.XRAY_CID) || 71554513306883
+export const MEDIA_CID: number = (typeof window !== 'undefined' && window.MEDIA_CID) || 40448509717507
 
 import { wallDate } from './chainTime'
 
